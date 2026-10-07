@@ -129,14 +129,6 @@
         <tbody id="results-body"></tbody>
       </table></div>
     </section>
-
-    <section>
-      <h2>Flagged for review</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Tx ID</th><th>From → To</th><th>Type</th><th>Amount</th><th>Timestamp</th><th>Review reasons</th></tr></thead>
-        <tbody id="flagged-body"></tbody>
-      </table></div>
-    </section>
   </div>
 </main>
 
@@ -259,7 +251,6 @@
     $('account-ids').innerHTML = r.accounts.map(a => `<option value="${esc(a.id)}">`).join('');
     renderCustomers();
     renderResults();
-    renderFlagged();
   }
 
   // Active = status ACTIVE; deactivated = FROZEN, CLOSED or DORMANT
@@ -304,14 +295,6 @@
       <td class="detail">${r.reason ? esc(r.reason) : flags(r)}</td>
       <td class="num">${money(r.balanceAfter)}</td></tr>`; }).join('')
       : `<tr><td colspan="9" class="empty">No transactions match this filter.</td></tr>`;
-  }
-
-  function renderFlagged() {
-    $('flagged-body').innerHTML = current.flagged.length ? [...current.flagged].reverse().map(r => { const t = r.transaction; return `<tr${t.id === lastTxId ? ' class="new"' : ''}>
-      <td>${esc(t.id)}</td><td>${acct(t)}</td><td>${esc(t.type)}</td>
-      <td class="num">${money(t.amount)}</td><td>${esc(t.timestamp.replace('T', ' '))}</td>
-      <td>${flags(r)}</td></tr>`; }).join('')
-      : `<tr><td colspan="6" class="empty">Nothing flagged for review.</td></tr>`;
   }
 })();
 </script>

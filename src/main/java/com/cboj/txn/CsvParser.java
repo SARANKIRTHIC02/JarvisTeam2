@@ -16,7 +16,11 @@ import org.apache.commons.csv.CSVRecord;
 import org.springframework.stereotype.Component;
 
 /**
- * Expected columns:
+ * Reads the two CSVs from the hackathon brief. We go easy on bad values: an amount like "12.5O" or a
+ * broken timestamp becomes null, and the processor rejects that row as INVALID RECORD. One bad row
+ * shouldn't take the whole file down.
+ *
+ * Columns (as named in the provided files):
  *   accounts:     accountId, customerName, accountType, status, balance, dailyLimit, currency, openedDate
  *   transactions: transactionId, timestamp, type, fromAccount, toAccount, amount, channel, description
  */
@@ -26,7 +30,7 @@ public class CsvParser {
     private static final CSVFormat FORMAT = CSVFormat.DEFAULT.builder()
             .setHeader().setSkipHeaderRecord(true).setTrim(true).setIgnoreEmptyLines(true).get();
 
-    /** Accounts keyed by id. Rows with an unreadable balance are skipped. */
+    // An account with a broken balance is skipped, so any transaction against it fails as INVALID ACCOUNT
     public Map<String, Account> readAccounts(InputStream in) throws IOException {
         Map<String, Account> accounts = new LinkedHashMap<>();
         for (CSVRecord row : parse(in)) {

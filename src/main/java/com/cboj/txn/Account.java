@@ -20,7 +20,7 @@ public class Account {
         this.dailyLimit = dailyLimit;
     }
 
-    /** Only ACTIVE accounts can transact; FROZEN, CLOSED and DORMANT cannot. */
+    // Anything that isn't ACTIVE (FROZEN, CLOSED, DORMANT, ...) can't send or receive money
     public boolean isActive() {
         return "ACTIVE".equalsIgnoreCase(status);
     }

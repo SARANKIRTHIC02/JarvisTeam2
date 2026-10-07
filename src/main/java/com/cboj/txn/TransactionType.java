@@ -14,7 +14,8 @@ public enum TransactionType {
         return this == DEPOSIT || this == TRANSFER;
     }
 
-    /** Case-insensitive; returns null for unsupported types (e.g. REVERSAL). */
+    // Case-insensitive, because the file has a lowercase "purchase" in it. Anything we don't recognise
+    // (like REVERSAL) comes back null and gets rejected. We weren't sure which account a reversal should credit.
     public static TransactionType parse(String value) {
         try {
             return valueOf(value.trim().toUpperCase());

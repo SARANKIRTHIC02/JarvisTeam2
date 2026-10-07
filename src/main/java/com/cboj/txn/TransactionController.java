@@ -19,26 +19,26 @@ public class TransactionController {
         this.bankService = bankService;
     }
 
-    /** Process the sample files bundled with the app. */
+    // Loads the CSVs we ship in resources/sample and runs them through the engine
     @PostMapping("/process/sample")
     public BatchResult processSample() throws IOException {
         return bankService.processBatch(new ClassPathResource("sample/accounts.csv").getInputStream(),
                 new ClassPathResource("sample/transactions.csv").getInputStream());
     }
 
-    /** Plain-text report for the sample files, in the format from the requirements. */
+    // Handy for the demo: the same results as plain text, matching the example output in the brief
     @GetMapping(value = "/process/sample/report", produces = MediaType.TEXT_PLAIN_VALUE)
     public String sampleReport() throws IOException {
         return processSample().report();
     }
 
-    /** Apply one new transaction to the most recently processed batch. */
+    // Adds a single transaction on top of whichever batch was loaded last
     @PostMapping("/transactions")
     public NewTransactionResponse newTransaction(@RequestBody NewTransactionRequest request) {
         return bankService.submit(request);
     }
 
-    /** Current state: all results so far (batch + new transactions) and balances. */
+    // Lets the page refresh without rerunning the batch
     @GetMapping("/current")
     public BatchResult current() {
         return bankService.current();

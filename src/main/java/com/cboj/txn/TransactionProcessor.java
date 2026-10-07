@@ -10,8 +10,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Applies the business rules to transactions. Transactions are processed in file order (the file is chronological).
- * Rejected transactions move no money; flagged ones are still processed.
+ * This is where the business rules live.
+ *
+ * Each transaction goes through two stages. First the hard checks in validate(), which can reject it
+ * outright. Then the review checks, which only flag it. A flagged transaction still goes through, because
+ * the brief says valid transactions should be processed even if someone needs to look at them later.
+ *
+ * Rows are processed in the order they appear in the file. The provided file is already sorted by
+ * timestamp, so we didn't add a sort.
  */
 @Service
 public class TransactionProcessor {
@@ -31,14 +37,13 @@ public class TransactionProcessor {
         this.velocityWindowMinutes = velocityWindowMinutes;
     }
 
-    /** Processes a whole batch against a fresh ledger. */
+    // Only the tests call this. The app goes through BankService, because it needs to keep the ledger.
     public BatchResult process(Map<String, Account> accounts, List<Transaction> transactions) {
         Ledger ledger = new Ledger(accounts);
         transactions.forEach(tx -> apply(ledger, tx));
         return summarize(ledger);
     }
 
-    /** Validates, reviews and applies one transaction, recording the result in the ledger. */
     public TransactionResult apply(Ledger ledger, Transaction tx) {
         TransactionResult result = evaluate(ledger, tx);
         ledger.results.add(result);
@@ -54,12 +59,14 @@ public class TransactionProcessor {
             return new TransactionResult(tx, "REJECTED", rejection, List.of(), null);
         }
 
-        // Review checks (against the account the money leaves; for deposits, the receiving account)
+        // Review checks. We look at the account the money leaves. Deposits don't have a "from" account,
+        // so for those we use the account receiving the money.
         Account primary = tx.type().debitsFromAccount() ? from : to;
         List<String> flags = new ArrayList<>();
         if (tx.amount().compareTo(largeAmountThreshold) > 0) {
             flags.add("LARGE AMOUNT");
         }
+        // The daily limit only counts money going out. A deposit shouldn't eat into someone's spending limit.
         if (tx.type().debitsFromAccount()) {
             String dayKey = from.getId() + "|" + tx.timestamp().toLocalDate();
             BigDecimal limit = from.getDailyLimit() != null ? from.getDailyLimit() : defaultDailyLimit;
@@ -69,6 +76,8 @@ public class TransactionProcessor {
             }
             ledger.dailyDebits.put(dayKey, dayTotal);
         }
+        // Velocity check as a sliding window: drop anything older than the window, then count what's left
+        // (including this transaction).
         List<LocalDateTime> recent = ledger.recentActivity.computeIfAbsent(primary.getId(), k -> new ArrayList<>());
         LocalDateTime windowStart = tx.timestamp().minusMinutes(velocityWindowMinutes);
         recent.removeIf(time -> !time.isAfter(windowStart));
@@ -77,7 +86,7 @@ public class TransactionProcessor {
             flags.add("HIGH VELOCITY");
         }
 
-        // Move the money
+        // It passed every check, so move the money. A transfer does both steps.
         if (tx.type().debitsFromAccount()) {
             from.setBalance(from.getBalance().subtract(tx.amount()));
         }
@@ -87,7 +96,12 @@ public class TransactionProcessor {
         return new TransactionResult(tx, "APPROVED", null, flags, primary.getBalance());
     }
 
-    /** Returns the rejection reason, or null if the transaction is valid. */
+    /**
+     * The hard rules. Returns the reason for the first rule that fails, or null if the transaction is fine.
+     *
+     * The ID is recorded as soon as the record is readable, even if a later rule rejects the transaction.
+     * That way, resending a rejected transaction with the same ID still counts as a duplicate.
+     */
     private String validate(Transaction tx, Account from, Account to, Set<String> seenIds) {
         if (tx.amount() == null || tx.timestamp() == null) {
             return "INVALID RECORD";
@@ -113,6 +127,7 @@ public class TransactionProcessor {
         return null;
     }
 
+    // Counts plus the plain-text report, in the same format as the example in the brief (TX001 APPROVED, ...)
     public BatchResult summarize(Ledger ledger) {
         List<TransactionResult> results = List.copyOf(ledger.results);
         int approved = (int) results.stream().filter(r -> r.status().equals("APPROVED")).count();

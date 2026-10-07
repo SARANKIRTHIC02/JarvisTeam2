@@ -10,8 +10,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Holds the ledger from the most recent batch so new transactions can be applied on top of it.
- * Methods are synchronized because balance updates must happen one at a time.
+ * Keeps the ledger from the last batch, so transactions added from the page build on those balances
+ * instead of starting from scratch.
+ *
+ * The methods are synchronized because two requests changing the same balance at once would be a real
+ * bug. For an MVP, a simple lock is enough.
  */
 @Service
 public class BankService {
@@ -35,13 +38,15 @@ public class BankService {
             ledger = fresh;
             return processor.summarize(ledger);
         } catch (IllegalArgumentException e) {
-            // Commons CSV throws this when an expected column is missing
+            // Commons CSV throws this when a column we rely on isn't in the header,
+            // e.g. if the file format changes on us
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unexpected CSV format: " + e.getMessage());
         }
     }
 
     public synchronized NewTransactionResponse submit(NewTransactionRequest request) {
         Ledger current = requireLedger();
+        // The ID and timestamp are optional on the form, so fill in defaults when they're missing
         Transaction tx = new Transaction(
                 isBlank(request.transactionId()) ? nextId() : request.transactionId().trim(),
                 request.timestamp() != null ? request.timestamp() : LocalDateTime.now(clock),
@@ -67,6 +72,7 @@ public class BankService {
         return ledger;
     }
 
+    // TXN-00001, TXN-00002, ... A different prefix from the file's TX00001-style IDs, so the two can't clash
     private String nextId() {
         return "TXN-%05d".formatted(idSequence.incrementAndGet());
     }

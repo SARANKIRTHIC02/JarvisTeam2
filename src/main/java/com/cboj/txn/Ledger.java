@@ -9,13 +9,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** State that carries over between transactions: balances, seen IDs, daily totals and recent activity. */
+/**
+ * Everything we need to remember from one transaction to the next. It's all in one place so a batch and
+ * any transactions added afterwards share the same state.
+ */
 public class Ledger {
 
     final Map<String, Account> accounts;
-    final Set<String> seenIds = new HashSet<>();                              // duplicate detection
-    final Map<String, BigDecimal> dailyDebits = new HashMap<>();              // "accountId|date" -> total out
-    final Map<String, List<LocalDateTime>> recentActivity = new HashMap<>();  // accountId -> recent tx times
+    final Set<String> seenIds = new HashSet<>();                              // every ID we've seen, to catch duplicates
+    final Map<String, BigDecimal> dailyDebits = new HashMap<>();              // "ACC1001|2026-10-15" -> money out that day
+    final Map<String, List<LocalDateTime>> recentActivity = new HashMap<>();  // recent timestamps per account, for velocity
     final List<TransactionResult> results = new ArrayList<>();
 
     public Ledger(Map<String, Account> accounts) {
