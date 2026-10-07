@@ -39,6 +39,8 @@
   .filters button { background: #fff; color: var(--text); border-color: var(--border); }
   .filters button.active { background: var(--brand); color: #fff; border-color: var(--brand); }
   .table-wrap { overflow-x: auto; }
+  .table-wrap.scroll { max-height: 480px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+  .table-wrap.scroll th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
@@ -124,7 +126,7 @@
         <button data-filter="REJECTED">Rejected</button>
         <button data-filter="flagged">Flagged</button>
       </div>
-      <div class="table-wrap"><table>
+      <div class="table-wrap scroll"><table>
         <thead><tr><th>Row</th><th>Tx ID</th><th>From → To</th><th>Type</th><th>Amount</th><th>Timestamp</th>
           <th>Status</th><th>Reason / Flags</th><th>Balance after</th></tr></thead>
         <tbody id="results-body"></tbody>
@@ -150,9 +152,10 @@
   let current = null;
   let filter = 'all';
   let customerFilter = null; // null = customer list collapsed
+  let source = ''; // which files the current batch came from, shown under the summary
   let lastTxId = null; // highlighted after a new transaction is submitted
 
-  async function submit(request) {
+  async function submit(request, from) {
     setBusy(true);
     $('error').hidden = true;
     try {
@@ -160,6 +163,7 @@
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.message || body?.detail || body?.error || `Request failed (${res.status})`);
       current = body;
+      source = `Processed ${from} at ${new Date().toLocaleTimeString()}`;
       lastTxId = null;
       $('tx-result').hidden = true;
       render();
@@ -174,10 +178,16 @@
   // New transaction form: show the account fields that apply to the chosen type
   const syncAccountFields = () => {
     const type = $('tx-type').value;
-    $('from-field').hidden = type === 'DEPOSIT';
-    $('to-field').hidden = !(type === 'DEPOSIT' || type === 'TRANSFER');
+    // PURCHASE/WITHDRAWAL: from only · DEPOSIT: to only · TRANSFER: both. Shown fields are required.
+    const showFrom = type !== 'DEPOSIT';
+    const showTo = type === 'DEPOSIT' || type === 'TRANSFER';
+    $('from-field').hidden = !showFrom;
+    $('to-field').hidden = !showTo;
+    $('from-field').querySelector('input').required = showFrom;
+    $('to-field').querySelector('input').required = showTo;
   };
   $('tx-type').addEventListener('change', syncAccountFields);
+  syncAccountFields();
 
   $('tx-form').addEventListener('submit', async e => {
     e.preventDefault();
@@ -203,6 +213,7 @@
       lastTxId = r.transaction.id;
       render();
       scrollLogTo(lastTxId);
+      $('results-body').closest('.table-wrap').scrollTop = 0; // newest row is at the top
       if (r.status === 'APPROVED') e.target.reset(), syncAccountFields();
     } catch (err) {
       $('tx-result').className = 'banner error';
@@ -221,9 +232,10 @@
   $('upload-form').addEventListener('submit', e => {
     e.preventDefault();
     const data = new FormData(e.target);
-    submit(() => fetch('/api/process', { method: 'POST', body: data }));
+    submit(() => fetch('/api/process', { method: 'POST', body: data }),
+      `${data.get('accounts').name} + ${data.get('transactions').name}`);
   });
-  $('sample-btn').addEventListener('click', () => submit(() => fetch('/api/process/sample', { method: 'POST' })));
+  $('sample-btn').addEventListener('click', () => submit(() => fetch('/api/process/sample', { method: 'POST' }), 'sample data'));
   $('filters').addEventListener('click', e => {
     const btn = e.target.closest('button');
     if (!btn) return;
@@ -243,7 +255,7 @@
     const r = current;
     $('report').hidden = false;
     $('warnings').hidden = true;
-    $('meta').textContent = '';
+    $('meta').textContent = source;
     const tiles = [
       ['Transactions processed', r.processed, ''],
       ['Approved', r.approved, 'ok'],
