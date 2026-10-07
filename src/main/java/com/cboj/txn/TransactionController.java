@@ -7,9 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api")
@@ -19,13 +17,6 @@ public class TransactionController {
 
     public TransactionController(BankService bankService) {
         this.bankService = bankService;
-    }
-
-    /** Upload accounts.csv and transactions.csv, get back the processing results. */
-    @PostMapping("/process")
-    public BatchResult process(@RequestParam MultipartFile accounts,
-                               @RequestParam MultipartFile transactions) throws IOException {
-        return bankService.processBatch(accounts.getInputStream(), transactions.getInputStream());
     }
 
     /** Process the sample files bundled with the app. */

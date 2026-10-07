@@ -11,7 +11,6 @@ flags suspicious ones for review, updates balances and prints a summary.
 ```
 
 API:
-- `POST /api/process` (multipart `accounts`, `transactions`) → JSON results
 - `POST /api/process/sample` → runs the bundled sample files
 - `POST /api/transactions` (JSON) → apply one new transaction on top of the last processed batch, e.g.
   `{"type":"TRANSFER","fromAccount":"ACC1001","toAccount":"ACC1002","amount":100}`.

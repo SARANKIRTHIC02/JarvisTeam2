@@ -11,10 +11,10 @@
     --warn: #9a6700; --warn-bg: #fff6db;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; } /* keep `hidden` working on elements styled with display: flex */
   body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
   header { background: var(--brand); color: #fff; padding: 16px 24px; }
   header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  header p { margin: 2px 0 0; opacity: .8; font-size: 13px; }
   main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
   section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; }
   h2 { font-size: 15px; margin: 0 0 12px; }
@@ -53,6 +53,9 @@
   .empty { color: var(--muted); padding: 12px 0; }
   tr.new td { background: var(--warn-bg); }
   a { color: var(--brand); }
+  /* Before any data is loaded, the start section sits in the middle of the page */
+  section.start { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  section.start button { padding: 12px 28px; font-size: 16px; }
   .banner.ok { background: var(--ok-bg); color: var(--ok); }
   #tx-form label { min-width: 140px; }
   #tx-form input, #tx-form select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
@@ -61,18 +64,12 @@
 <body>
 <header>
   <h1>Canadian Bank of Jarvis · Transaction Engine</h1>
-  <p>Upload account and transaction files to validate, process and review a batch.</p>
 </header>
 
 <main>
-  <section>
+  <section id="start" class="start">
     <h2>Process a batch</h2>
-    <form id="upload-form">
-      <label>Accounts CSV <input type="file" name="accounts" accept=".csv,text/csv" required></label>
-      <label>Transactions CSV <input type="file" name="transactions" accept=".csv,text/csv" required></label>
-      <button type="submit" id="upload-btn">Process files</button>
-      <button type="button" class="secondary" id="sample-btn">Run sample data</button>
-    </form>
+    <button type="button" id="sample-btn">Run sample data</button>
   </section>
 
   <div id="error" class="banner error" hidden></div>
@@ -225,16 +222,9 @@
   });
 
   function setBusy(busy) {
-    $('upload-btn').disabled = busy;
     $('sample-btn').disabled = busy;
   }
 
-  $('upload-form').addEventListener('submit', e => {
-    e.preventDefault();
-    const data = new FormData(e.target);
-    submit(() => fetch('/api/process', { method: 'POST', body: data }),
-      `${data.get('accounts').name} + ${data.get('transactions').name}`);
-  });
   $('sample-btn').addEventListener('click', () => submit(() => fetch('/api/process/sample', { method: 'POST' }), 'sample data'));
   $('filters').addEventListener('click', e => {
     const btn = e.target.closest('button');
@@ -254,6 +244,7 @@
   function render() {
     const r = current;
     $('report').hidden = false;
+    $('start').hidden = true; // the sample can only be loaded once, so drop the start section
     $('warnings').hidden = true;
     $('meta').textContent = source;
     const tiles = [
