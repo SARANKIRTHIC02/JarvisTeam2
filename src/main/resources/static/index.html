@@ -49,6 +49,7 @@
   .badge.REJECTED { background: var(--bad-bg); color: var(--bad); }
   .badge.flag { background: var(--warn-bg); color: var(--warn); font-weight: 500; margin-right: 4px; }
   .empty { color: var(--muted); padding: 12px 0; }
+  tr.new td { background: var(--warn-bg); }
   a { color: var(--brand); }
   .banner.ok { background: var(--ok-bg); color: var(--ok); }
   #tx-form label { min-width: 140px; }
@@ -106,10 +107,10 @@
     <section>
       <h2>Customers</h2>
       <div class="filters" id="customer-filters">
-        <button data-filter="active" class="active">Active customers</button>
+        <button data-filter="active">Active customers</button>
         <button data-filter="inactive">Deactivated customers</button>
       </div>
-      <div class="table-wrap"><table>
+      <div class="table-wrap" id="customers-list" hidden><table>
         <thead><tr><th>Account</th><th>Customer</th><th>Status</th><th>Balance</th><th>Daily limit</th></tr></thead>
         <tbody id="customers-body"></tbody>
       </table></div>
@@ -137,14 +138,6 @@
         <tbody id="flagged-body"></tbody>
       </table></div>
     </section>
-
-    <section>
-      <h2>Account balances</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Account</th><th>Status</th><th>Opening</th><th>Closing</th><th>Change</th></tr></thead>
-        <tbody id="accounts-body"></tbody>
-      </table></div>
-    </section>
   </div>
 </main>
 
@@ -156,7 +149,8 @@
 
   let current = null;
   let filter = 'all';
-  let customerFilter = 'active';
+  let customerFilter = null; // null = customer list collapsed
+  let lastTxId = null; // highlighted after a new transaction is submitted
 
   async function submit(request) {
     setBusy(true);
@@ -166,6 +160,7 @@
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.message || body?.detail || body?.error || `Request failed (${res.status})`);
       current = body;
+      lastTxId = null;
       $('tx-result').hidden = true;
       render();
     } catch (e) {
@@ -205,7 +200,9 @@
         (r.balanceAfter != null ? ` · new balance ${money(r.balanceAfter)}` : '');
       box.hidden = false;
       current = body.batch;
+      lastTxId = r.transaction.id;
       render();
+      scrollLogTo(lastTxId);
       if (r.status === 'APPROVED') e.target.reset(), syncAccountFields();
     } catch (err) {
       $('tx-result').className = 'banner error';
@@ -237,8 +234,8 @@
   $('customer-filters').addEventListener('click', e => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    customerFilter = btn.dataset.filter;
-    [...$('customer-filters').children].forEach(b => b.classList.toggle('active', b === btn));
+    // Clicking the open list's button again collapses it
+    customerFilter = customerFilter === btn.dataset.filter ? null : btn.dataset.filter;
     renderCustomers();
   });
 
@@ -260,7 +257,6 @@
     renderCustomers();
     renderResults();
     renderFlagged();
-    renderAccounts();
   }
 
   // Active = status ACTIVE; deactivated = FROZEN, CLOSED or DORMANT
@@ -268,8 +264,12 @@
     const active = current.accounts.filter(a => a.active);
     const inactive = current.accounts.filter(a => !a.active);
     const [activeBtn, inactiveBtn] = $('customer-filters').children;
-    activeBtn.textContent = `Active customers (${active.length})`;
-    inactiveBtn.textContent = `Deactivated customers (${inactive.length})`;
+    const arrow = filter => customerFilter === filter ? '▾' : '▸';
+    activeBtn.textContent = `${arrow('active')} Active customers (${active.length})`;
+    inactiveBtn.textContent = `${arrow('inactive')} Deactivated customers (${inactive.length})`;
+    activeBtn.classList.toggle('active', customerFilter === 'active');
+    inactiveBtn.classList.toggle('active', customerFilter === 'inactive');
+    $('customers-list').hidden = !customerFilter;
     const rows = customerFilter === 'active' ? active : inactive;
     $('customers-body').innerHTML = rows.length ? rows.map(a => `<tr>
       <td>${esc(a.id)}</td><td>${esc(a.customerName)}</td>
@@ -281,10 +281,19 @@
   const acct = t => esc([t.fromAccount ?? '—', t.toAccount ?? '—'].join(' → '));
   const flags = r => r.flags.map(f => `<span class="badge flag">${esc(f)}</span>`).join('');
 
+  // Scroll the report log so the line for the given transaction is in view
+  function scrollLogTo(id) {
+    const pre = $('reason-chips').querySelector('pre');
+    const lines = current.report.split('\n');
+    const index = lines.findLastIndex(line => line.startsWith(id + ' '));
+    if (index >= 0) pre.scrollTop = index * (pre.scrollHeight / lines.length) - pre.clientHeight / 2;
+  }
+
   function renderResults() {
+    // Newest first, so transactions added after the batch show at the top
     const rows = current.results.filter(r =>
-      filter === 'all' ? true : filter === 'flagged' ? r.flags.length : r.status === filter);
-    $('results-body').innerHTML = rows.length ? rows.map((r, i) => { const t = r.transaction; return `<tr>
+      filter === 'all' ? true : filter === 'flagged' ? r.flags.length : r.status === filter).reverse();
+    $('results-body').innerHTML = rows.length ? rows.map(r => { const t = r.transaction; return `<tr${t.id === lastTxId ? ' class="new"' : ''}>
       <td class="num">${current.results.indexOf(r) + 1}</td>
       <td>${esc(t.id)}</td><td>${acct(t)}</td><td>${esc(t.type ?? t.rawType ?? '')}</td>
       <td class="num">${money(t.amount)}</td><td>${esc(t.timestamp?.replace('T', ' ') ?? '')}</td>
@@ -295,20 +304,11 @@
   }
 
   function renderFlagged() {
-    $('flagged-body').innerHTML = current.flagged.length ? current.flagged.map(r => { const t = r.transaction; return `<tr>
+    $('flagged-body').innerHTML = current.flagged.length ? [...current.flagged].reverse().map(r => { const t = r.transaction; return `<tr${t.id === lastTxId ? ' class="new"' : ''}>
       <td>${esc(t.id)}</td><td>${acct(t)}</td><td>${esc(t.type)}</td>
       <td class="num">${money(t.amount)}</td><td>${esc(t.timestamp.replace('T', ' '))}</td>
       <td>${flags(r)}</td></tr>`; }).join('')
       : `<tr><td colspan="6" class="empty">Nothing flagged for review.</td></tr>`;
-  }
-
-  function renderAccounts() {
-    $('accounts-body').innerHTML = current.accounts.map(a => {
-      const delta = Number(a.balance) - Number(a.openingBalance);
-      return `<tr><td>${esc(a.id)} · ${esc(a.customerName)}</td><td>${esc(a.status)}</td>
-        <td class="num">${money(a.openingBalance)}</td><td class="num">${money(a.balance)}</td>
-        <td class="num" style="color:${delta < 0 ? 'var(--bad)' : delta > 0 ? 'var(--ok)' : 'inherit'}">${delta ? money(delta) : '—'}</td></tr>`;
-    }).join('');
   }
 })();
 </script>
