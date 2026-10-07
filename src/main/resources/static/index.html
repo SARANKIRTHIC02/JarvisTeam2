@@ -104,6 +104,18 @@
     </section>
 
     <section>
+      <h2>Customers</h2>
+      <div class="filters" id="customer-filters">
+        <button data-filter="active" class="active">Active customers</button>
+        <button data-filter="inactive">Deactivated customers</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Account</th><th>Customer</th><th>Status</th><th>Balance</th><th>Daily limit</th></tr></thead>
+        <tbody id="customers-body"></tbody>
+      </table></div>
+    </section>
+
+    <section>
       <h2>Transaction results</h2>
       <div class="filters" id="filters">
         <button data-filter="all" class="active">All</button>
@@ -144,6 +156,7 @@
 
   let current = null;
   let filter = 'all';
+  let customerFilter = 'active';
 
   async function submit(request) {
     setBusy(true);
@@ -221,6 +234,13 @@
     [...$('filters').children].forEach(b => b.classList.toggle('active', b === btn));
     renderResults();
   });
+  $('customer-filters').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    customerFilter = btn.dataset.filter;
+    [...$('customer-filters').children].forEach(b => b.classList.toggle('active', b === btn));
+    renderCustomers();
+  });
 
   function render() {
     const r = current;
@@ -237,9 +257,25 @@
       `<div class="tile ${cls}"><div class="label">${l}</div><div class="value">${esc(v)}</div></div>`).join('');
     $('reason-chips').innerHTML = `<pre style="margin:0;font-size:12px;max-height:240px;overflow:auto">${esc(r.report)}</pre>`;
     $('account-ids').innerHTML = r.accounts.map(a => `<option value="${esc(a.id)}">`).join('');
+    renderCustomers();
     renderResults();
     renderFlagged();
     renderAccounts();
+  }
+
+  // Active = status ACTIVE; deactivated = FROZEN, CLOSED or DORMANT
+  function renderCustomers() {
+    const active = current.accounts.filter(a => a.active);
+    const inactive = current.accounts.filter(a => !a.active);
+    const [activeBtn, inactiveBtn] = $('customer-filters').children;
+    activeBtn.textContent = `Active customers (${active.length})`;
+    inactiveBtn.textContent = `Deactivated customers (${inactive.length})`;
+    const rows = customerFilter === 'active' ? active : inactive;
+    $('customers-body').innerHTML = rows.length ? rows.map(a => `<tr>
+      <td>${esc(a.id)}</td><td>${esc(a.customerName)}</td>
+      <td><span class="badge ${a.active ? 'APPROVED' : 'REJECTED'}">${esc(a.status)}</span></td>
+      <td class="num">${money(a.balance)}</td><td class="num">${a.dailyLimit != null ? money(a.dailyLimit) : 'default'}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="empty">No customers in this list.</td></tr>`;
   }
 
   const acct = t => esc([t.fromAccount ?? '—', t.toAccount ?? '—'].join(' → '));

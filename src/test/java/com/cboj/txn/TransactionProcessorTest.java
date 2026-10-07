@@ -77,6 +77,22 @@ class TransactionProcessorTest {
     }
 
     @Test
+    void flagsDebitsOverTheAccountsOwnDailyLimit() {
+        accounts.put("L1", new Account("L1", "Erin", new BigDecimal("10000"), "ACTIVE", new BigDecimal("1000")));
+        accounts.put("L2", new Account("L2", "Femi", new BigDecimal("10000"), "ACTIVE", new BigDecimal("1000")));
+        add("S1", "PURCHASE", "L1", null, "1200", 60);       // one transaction alone over the 1000 limit
+        add("C1", "PURCHASE", "L2", null, "600", 60);
+        add("C2", "WITHDRAWAL", "L2", null, "500", 60);      // 1100 for the day > 1000 limit
+
+        List<TransactionResult> results = run().results();
+
+        assertThat(results).allMatch(r -> r.status().equals("APPROVED"));
+        assertThat(results.get(0).flags()).containsExactly("DAILY LIMIT EXCEEDED");
+        assertThat(results.get(1).flags()).isEmpty();
+        assertThat(results.get(2).flags()).containsExactly("DAILY LIMIT EXCEEDED");
+    }
+
+    @Test
     void producesTextReportInRequiredFormat() {
         add("TX001", "PURCHASE", "A1", null, "10", 60);
         add("TX002", "PURCHASE", "NOPE", null, "10", 60);
